@@ -20,13 +20,13 @@ variable "region" {
 }
 
 variable "web_plan" {
-  description = "Render web-service plan. Starter is paid; check Render pricing before applying."
+  description = "Free Render web-service plan; free instances sleep when idle and have limited resources."
   type        = string
-  default     = "starter"
+  default     = "free"
 }
 
 variable "postgres_plan" {
-  description = "Render PostgreSQL plan. Free databases expire after 30 days; change to a paid plan for persistence."
+  description = "Free Render PostgreSQL plan; the database expires after 30 days."
   type        = string
   default     = "free"
 }

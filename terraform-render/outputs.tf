@@ -3,13 +3,12 @@ output "api_gateway_url" {
   value       = render_web_service.gateway.url
 }
 
-output "eureka_dashboard_url" {
-  description = "Public Eureka dashboard URL; restrict access before production use."
-  value       = render_web_service.eureka.url
+output "auth_service_url" {
+  description = "Public auth service URL; use for diagnostics only."
+  value       = render_web_service.auth.url
 }
 
-output "postgres_internal_connection_string" {
-  description = "Sensitive internal PostgreSQL connection string. Do not share publicly."
-  value       = render_postgres.library.connection_info.internal_connection_string
-  sensitive   = true
+output "book_service_url" {
+  description = "Public book service URL; use for diagnostics only."
+  value       = render_web_service.book1.url
 }

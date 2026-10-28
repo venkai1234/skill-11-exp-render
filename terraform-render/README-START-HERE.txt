@@ -1,59 +1,56 @@
-SKILL-11-EXP: RENDER + TERRAFORM DEPLOYMENT
+SKILL-11-EXP: RENDER + TERRAFORM (FREE-TIER EXPERIMENT)
 
-IMPORTANT
-- This configuration uses paid Render web services (default plan: starter) because this Eureka-based multi-service architecture needs services that can receive private-network traffic.
-- The PostgreSQL plan defaults to free, which expires after 30 days. For persistent data, select a paid database plan before applying.
-- Check Render pricing and your workspace's available plans before `terraform apply`.
-- Do not commit API keys, JWT secrets, terraform.tfvars, or Terraform state.
+ARCHITECTURE
+- API Gateway, Auth Service, and Book Service are separate Free web services.
+- Eureka is deliberately not deployed: Render Free web services cannot receive private-network traffic, and the original Eureka setup advertised container IPs.
+- The gateway calls the auth/book services by their public HTTPS URLs.
+- Render Free PostgreSQL is used for the Book Service.
 
-PROJECT EXPECTED AT REPOSITORY ROOT
-  compose.yaml
-  library-api-gateway/Dockerfile
-  library-auth-service/Dockerfile
-  library-book-service/Dockerfile
-  library-eureka-server/Dockerfile
-  terraform-render/...
+The three application Dockerfiles use a smaller JVM heap setting to improve the chance of running on Render Free 256 MB instances. This is still not a guarantee: Spring Boot startup may be slow or exceed free memory.
 
-SETUP ON WINDOWS
-1. Install Terraform: https://developer.hashicorp.com/terraform/install
-2. Install Git: https://git-scm.com/download/win
-3. Create a Render API key in the Render dashboard/account settings. Do not paste it into files.
-4. In PowerShell, set the API key for this terminal session:
-   $env:RENDER_API_KEY = "PASTE_YOUR_RENDER_API_KEY_HERE"
-5. Clone your GitHub repository and open its root folder. The repository URL must be HTTPS and the repository must be accessible to Render.
-6. Open PowerShell in the `terraform-render` directory.
-7. Set a strong JWT secret for this terminal session (use a password manager or a secure random generator):
-   $env:TF_VAR_jwt_secret = "REPLACE_WITH_A_UNIQUE_RANDOM_SECRET_AT_LEAST_32_CHARACTERS"
-8. Initialize Terraform:
-   terraform init
-   Expected: Terraform has been successfully initialized!
-9. Validate syntax:
+IMPORTANT FREE-TIER LIMITATIONS
+- Render Free web services sleep after 15 minutes without inbound traffic and may take about a minute to wake up.
+- Free web services cannot receive private-network traffic. This configuration uses public HTTPS calls instead.
+- Free PostgreSQL expires 30 days after creation and has limited storage. Export your data before expiration.
+- Your workspace may still require payment verification. If Render returns a payment-information-required error even for Free plans, stop; Terraform cannot bypass an account-level billing requirement. Do not add payment information unless you choose to.
+- This is for learning/testing, not production. Public auth/book service URLs should be secured before real use.
+
+REPOSITORY LAYOUT
+The root of the GitHub repository should contain compose.yaml, the three service folders, library-eureka-server (unused here), and terraform-render.
+
+SETUP
+1. Set your Render API key in PowerShell (never commit it):
+   $env:RENDER_API_KEY = "YOUR_RENDER_API_KEY"
+2. Set the Render Owner ID if the provider asks for it:
+   $env:RENDER_OWNER_ID = "YOUR_RENDER_OWNER_ID"
+3. Set a strong unique JWT secret for this terminal session:
+   $bytes = New-Object byte[] 48
+   $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+   $rng.GetBytes($bytes)
+   $env:TF_VAR_jwt_secret = [Convert]::ToBase64String($bytes)
+   $rng.Dispose()
+4. Commit/push these updated application.properties and terraform-render files to the GitHub repository's main branch.
+5. In this folder, run:
+   terraform init -upgrade
+   terraform fmt
    terraform validate
-   Expected: Success! The configuration is valid.
-10. Review the plan (replace the URL with your actual repository URL):
-   terraform plan -var='repo_url=https://github.com/YOUR-USERNAME/YOUR-REPOSITORY.git' -out=render.tfplan
-11. Carefully review the resources and cost. If anything is unexpected, do not apply.
-12. Create resources:
-   terraform apply render.tfplan
-13. Display gateway URL:
-   terraform output -raw api_gateway_url
+   terraform state list
+6. Review existing state before proceeding. The previous paid-plan apply may have created some resources. Do not blindly destroy them.
+7. If no resources exist in Terraform state, plan with:
+   terraform plan -var="repo_url=https://github.com/venkai1234/skill-11-exp-render.git" -out="render-free.tfplan"
+8. Confirm plan proposes only 4 resources (Postgres + auth + book + gateway), all web services plan="free". This configuration uses the Render free Postgres plan, which expires after 30 days. Then apply:
+   terraform apply "render-free.tfplan"
+9. If resources from the old configuration are already in state, stop and inspect/reconcile the plan first. Do not apply until Terraform shows no unexpected destroys or replacements.
+10. Get gateway URL:
+   $GATEWAY = terraform output -raw api_gateway_url
+   curl.exe -i "$GATEWAY/actuator/health"
+   curl.exe -i -X POST "$GATEWAY/api/auth/login" -H "Content-Type: application/json" -d '{"username":"admin","password":"admin123"}'
 
-RECOMMENDED REPOSITORY LAYOUT
-Put the contents of this archive's `skill-11-exp` directory at the root of the GitHub repository. Keep `terraform-render` as a subfolder. The Terraform repo_url must point to that repository.
+After login returns a JWT token, test books:
+   $TOKEN = "PASTE_TOKEN_HERE"
+   curl.exe -i -X GET "$GATEWAY/api/books" -H "Authorization: Bearer $TOKEN"
 
-TESTING
-PowerShell:
-$GATEWAY = terraform output -raw api_gateway_url
-curl.exe -i "$GATEWAY/actuator/health"
-curl.exe -i -X POST "$GATEWAY/api/auth/login" -H "Content-Type: application/json" -d '{"username":"admin","password":"admin123"}'
-
-Copy the token from the login JSON response, then:
-$TOKEN = "PASTE_TOKEN_HERE"
-curl.exe -i -X GET "$GATEWAY/api/books" -H "Authorization: Bearer $TOKEN"
-
-If login returns 200 but book requests fail, check the Render logs for the gateway, Eureka, auth, book services, and database. Ensure Eureka shows AUTH-SERVICE and BOOK-SERVICE instances UP. Never use the local Docker Compose hostname `postgres` in Render; Terraform sets the Render database address.
+If requests fail, check Render deploy/runtime logs. Free services can take time to wake up. Do not paste secrets into chat.
 
 CLEANUP
-To delete the Terraform-managed Render resources:
-terraform destroy -var='repo_url=https://github.com/YOUR-USERNAME/YOUR-REPOSITORY.git'
-Review the destroy plan carefully. This can delete your database and its data.
+Use terraform destroy only after reviewing the destroy plan carefully. It deletes Terraform-managed services and may delete the database and its data.
